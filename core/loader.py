@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import csv
 import io
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import pandas as pd
@@ -19,6 +20,8 @@ HEADER_SHAPE_RATIO = 0.8
 CSV_ENCODINGS = ("utf-8-sig", "gbk", "gb18030")
 CSV_DELIMITERS = ",;\t|"
 EXCEL_SUFFIXES = (".xlsx", ".xlsm")
+ZIP_MAGIC = b"PK\x03\x04"
+OLE2_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 
 
 class ExcelToolError(Exception):
@@ -52,19 +55,23 @@ class LoadedTable:
     source_name: str = ""
 
 
-def file_kind(filename: str) -> str:
-    """判断文件类型，返回 "excel" 或 "csv"；不支持的格式抛出中文错误。"""
+def sniff_kind(file_bytes: bytes, filename: str) -> str:
+    """按内容优先判断类型，返回 "excel" 或 "csv"。
+
+    扩展名是 .xls 但内容其实是 xlsx / CSV 的情况很常见（手机上传、系统导出），
+    这里先看文件头，再看扩展名。
+    """
     lower = filename.lower()
+    if file_bytes.startswith(ZIP_MAGIC):
+        return "excel"
+    if file_bytes.startswith(OLE2_MAGIC):
+        raise _xls_error()
+    if lower.endswith(".xls"):
+        return _legacy_kind(file_bytes)
     if lower.endswith(".csv"):
         return "csv"
     if lower.endswith(EXCEL_SUFFIXES):
         return "excel"
-    if lower.endswith(".xls"):
-        raise ExcelToolError(
-            "读取失败：暂时读不了 .xls 老格式",
-            "当前环境只安装了 openpyxl，它只能读取 .xlsx。",
-            "用 Excel 或 WPS 打开后「另存为 .xlsx」再上传。",
-        )
     raise ExcelToolError(
         "读取失败：不支持这种文件类型",
         "工具箱只接受 .xlsx / .xls / .csv。",
@@ -72,10 +79,39 @@ def file_kind(filename: str) -> str:
     )
 
 
+def _legacy_kind(file_bytes: bytes) -> str:
+    """扩展名是 .xls 但内容不是 OLE2：能当文本读就按 CSV，网页表格单独提示。"""
+    sample = file_bytes[:65536]
+    if b"\x00" in sample:
+        raise _xls_error()
+    for encoding in CSV_ENCODINGS:
+        try:
+            text = sample.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+        lowered = text.lower()
+        if "<table" in lowered or "<html" in lowered:
+            raise ExcelToolError(
+                "读取失败：这个「.xls」其实是网页格式",
+                "不少系统导出的 .xls 实际是 HTML 表格，扩展名像 Excel，内容不是。",
+                "用 Excel 或 WPS 打开后「另存为 .xlsx」再上传。",
+            )
+        return "csv"
+    raise _xls_error()
+
+
+def _xls_error() -> ExcelToolError:
+    return ExcelToolError(
+        "读取失败：这是 .xls 老格式，当前环境没有解析引擎",
+        "服务器只装了 openpyxl（只认 .xlsx），没有 xlrd，读不了二进制的旧版 Excel。",
+        "用 Excel 或 WPS 打开后「另存为 .xlsx」再上传；手机上可用 WPS 打开 → 另存为 → 选 xlsx。",
+    )
+
+
 def list_sheets(file_bytes: bytes, filename: str) -> tuple[str, ...]:
     """返回 Excel 的 sheet 名列表；CSV 没有 sheet，返回空元组。"""
     _check_file(file_bytes, filename)
-    if file_kind(filename) == "csv":
+    if sniff_kind(file_bytes, filename) == "csv":
         return ()
     try:
         with pd.ExcelFile(io.BytesIO(file_bytes), engine="openpyxl") as book:
@@ -92,7 +128,7 @@ def list_sheets(file_bytes: bytes, filename: str) -> tuple[str, ...]:
 
 
 def detect_header_row(raw: pd.DataFrame) -> int | None:
-    """自上而下找第一行「非空单元格 ≥ 2 且无重复值」的行，返回 0 基行号。"""
+    """自上而下找第一行「至少有 2 个不同非空值」的行，返回 0 基行号。"""
     candidates = _header_candidates(raw)
     return candidates[0] if candidates else None
 
@@ -126,12 +162,12 @@ def guess_header(raw: pd.DataFrame) -> HeaderGuess:
 
 
 def _header_candidates(raw: pd.DataFrame) -> list[int]:
-    """规则候选行：非空单元格 ≥ 2，且这一行没有重复值。"""
+    """规则候选行：至少有 2 个不同的非空值（重复表头也接受，读入时会自动改名）。"""
     candidates: list[int] = []
     for index in range(len(raw)):
         cells = [_cell_text(value) for value in raw.iloc[index].tolist()]
         non_empty = [text for text in cells if text]
-        if len(non_empty) < 2 or len(set(non_empty)) != len(non_empty):
+        if len(set(non_empty)) < 2:
             continue
         candidates.append(index)
     return candidates
@@ -202,7 +238,7 @@ def load_table(
     header_row 为 0 基行号，传 None 时自动探测；all_text=True 时所有列按文本读取。
     """
     _check_file(file_bytes, filename)
-    kind = file_kind(filename)
+    kind = sniff_kind(file_bytes, filename)
     warnings: list[str] = []
 
     if kind == "csv":
@@ -229,6 +265,12 @@ def load_table(
             warnings.append(guess.hint)
 
     df = _read_full(file_bytes, kind, sheet, header_row, all_text, encoding)
+    df, duplicates = _dedupe_columns(df)
+    if duplicates:
+        warnings.append(
+            f"检测到 {len(duplicates)} 个重复列名（{'、'.join(duplicates)}），"
+            "已自动改名为「列名_2」这类形式。"
+        )
     if len(df) > MAX_ROWS:
         raise ExcelToolError(
             f"读取失败：数据有 {len(df):,} 行，超过 20 万行上限",
@@ -325,6 +367,33 @@ def _read_full(
         raise error from exc
     df.columns = [str(name).strip().replace("\u3000", "") for name in df.columns]
     return df
+
+
+def unique_columns(names: Sequence[str]) -> list[str]:
+    """列名去重：重复的追加 _2、_3，返回新的列名列表。"""
+    used: set[str] = set()
+    result: list[str] = []
+    for base in names:
+        candidate = base
+        index = 2
+        while candidate in used:
+            candidate = f"{base}_{index}"
+            index += 1
+        used.add(candidate)
+        result.append(candidate)
+    return result
+
+
+def _dedupe_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    """列名去重：重复的追加 _2、_3，返回整理后的表和被改过名的原列名。"""
+    names = [str(name) for name in df.columns]
+    if len(set(names)) == len(names):
+        return df, []
+    unique = unique_columns(names)
+    renamed = [base for base, fixed in zip(names, unique) if base != fixed]
+    deduped = df.copy(deep=False)
+    deduped.columns = unique
+    return deduped, list(dict.fromkeys(renamed))
 
 
 def _sniff_encoding(file_bytes: bytes) -> str:

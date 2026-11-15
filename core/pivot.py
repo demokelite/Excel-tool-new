@@ -9,7 +9,7 @@ from collections.abc import Sequence
 
 import pandas as pd
 
-from core.loader import ExcelToolError
+from core.loader import ExcelToolError, unique_columns
 
 AGG_FUNCS = {
     "求和": "sum",
@@ -24,6 +24,10 @@ EMPTY_LABEL = "空值"
 MAX_PIVOT_ROWS = 5000
 DISPLAY_ROWS = 500
 MAX_CHART_ROWS = 100
+CHART_BAR = "柱状图"
+CHART_LINE = "折线图"
+CHART_PIE = "饼图"
+CHART_OPTIONS = (CHART_BAR, CHART_LINE, CHART_PIE)
 
 
 def numeric_columns(df: pd.DataFrame) -> list[str]:
@@ -46,6 +50,7 @@ def build_pivot(
     agg_label: str = "求和",
 ) -> pd.DataFrame:
     """生成带合计行 / 合计列的交叉表，返回压平表头后的结果，可直接导出。"""
+    df = _ensure_unique_columns(df)
     rows = _validate(df, row_cols, column_col, value_col)
     working = _fill_blank_dimensions(df, rows, column_col)
     pivot = pd.pivot_table(
@@ -82,6 +87,40 @@ def chart_data(result: pd.DataFrame, row_cols: Sequence[str]) -> pd.DataFrame:
     values = values.apply(pd.to_numeric, errors="coerce").fillna(0)
     values.index = labels
     return values.head(MAX_CHART_ROWS)
+
+
+def pie_data(result: pd.DataFrame, row_cols: Sequence[str]) -> pd.DataFrame:
+    """饼图数据：去掉合计行，只保留单一指标，返回「维度 / 数值」两列。"""
+    rows = [name for name in row_cols if name in result.columns]
+    if not rows or result.empty:
+        return pd.DataFrame(columns=["维度", "数值"])
+    body = result[result[rows[0]] != MARGIN_LABEL]
+    values = body.drop(columns=[*rows, MARGIN_LABEL], errors="ignore")
+    if len(values.columns) != 1:
+        raise ExcelToolError(
+            "饼图只支持单一指标",
+            f"当前结果有 {len(values.columns)} 个数值列（列维度把指标展开了），饼图只能画一圈。",
+            "把「列维度」设为「（不选）」，或者改用柱状图 / 折线图。",
+        )
+    labels = body[rows[0]].astype(str)
+    for name in rows[1:]:
+        labels = labels.str.cat(body[name].astype(str), sep=" / ")
+    series = pd.to_numeric(values.iloc[:, 0], errors="coerce").fillna(0)
+    data = pd.DataFrame(
+        {"维度": labels.to_numpy(), "数值": series.to_numpy()}
+    )
+    data = data[data["数值"] > 0]
+    return data.head(MAX_CHART_ROWS).reset_index(drop=True)
+
+
+def _ensure_unique_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """防御重复列名：上游若传入同名两列，先改名再透视，否则 pandas 会报 not 1-dimensional。"""
+    names = [str(name) for name in df.columns]
+    if len(set(names)) == len(names):
+        return df
+    fixed = df.copy()
+    fixed.columns = unique_columns(names)
+    return fixed
 
 
 def _validate(

@@ -112,6 +112,47 @@ class TestLoader(unittest.TestCase):
         self.assertEqual(table.header_row, 0)
         self.assertTrue(any("疑似表头" in text for text in table.warnings))
 
+    def test_xls_extension_with_zip_content_reads_as_xlsx(self) -> None:
+        data = _write_xlsx({"t": pd.DataFrame({"a": [1], "b": [2]})})
+        table = loader.load_table(data, "renamed.xls")
+        self.assertEqual(list(table.df.columns), ["a", "b"])
+
+    def test_xls_extension_with_csv_content_reads_as_csv(self) -> None:
+        data = "省份,数量\n广东,3\n".encode("utf-8-sig")
+        table = loader.load_table(data, "export.xls")
+        self.assertEqual(table.df["省份"].tolist(), ["广东"])
+
+    def test_real_xls_reports_missing_engine(self) -> None:
+        data = loader.OLE2_MAGIC + b"\x00" * 64
+        with self.assertRaises(loader.ExcelToolError) as ctx:
+            loader.load_table(data, "old.xls")
+        self.assertIn("老格式", ctx.exception.message)
+
+    def test_html_disguised_xls_is_reported(self) -> None:
+        data = "<html><body><table><tr><td>1</td></tr></table></body></html>"
+        with self.assertRaises(loader.ExcelToolError) as ctx:
+            loader.load_table(data.encode("gbk"), "fake.xls")
+        self.assertIn("网页格式", ctx.exception.message)
+
+    def test_headers_differing_only_by_space_are_renamed(self) -> None:
+        raw = pd.DataFrame(
+            [["订单号", "订单号 ", "金额"], ["001", "002", 3], ["003", "004", 5]]
+        )
+        data = _write_xlsx({"t": raw}, header=False)
+        table = loader.load_table(data, "dup.xlsx")
+        self.assertEqual(table.header_row, 0)
+        self.assertEqual(list(table.df.columns), ["订单号", "订单号_2", "金额"])
+        self.assertTrue(any("重复列名" in text for text in table.warnings))
+
+    def test_pivot_works_after_duplicate_headers_renamed(self) -> None:
+        raw = pd.DataFrame(
+            [["订单号", "订单号 ", "金额"], ["001", "002", 3], ["003", "004", 5]]
+        )
+        data = _write_xlsx({"t": raw}, header=False)
+        table = loader.load_table(data, "dup.xlsx")
+        result = pivot.build_pivot(table.df, ["订单号"], None, "金额", "求和")
+        self.assertFalse(result.empty)
+
     def test_load_table_all_text(self) -> None:
         table = loader.load_table(_title_then_header(), "销售.xlsx", all_text=True)
         self.assertEqual(table.df["数量"].iloc[0], "3")
@@ -128,9 +169,11 @@ class TestLoader(unittest.TestCase):
             loader.load_table(b"not an excel at all", "bad.xlsx")
         self.assertIn("读取失败", ctx.exception.message)
 
-    def test_legacy_xls_and_empty_file(self) -> None:
-        with self.assertRaises(loader.ExcelToolError):
-            loader.load_table(b"abc", "old.xls")
+    def test_legacy_xls_text_reads_as_csv(self) -> None:
+        table = loader.load_table(b"abc\n1\n", "old.xls")
+        self.assertEqual(table.df.shape, (1, 1))
+
+    def test_empty_file_reports_error(self) -> None:
         with self.assertRaises(loader.ExcelToolError):
             loader.load_table(b"", "empty.xlsx")
 
@@ -270,6 +313,32 @@ class TestPivot(unittest.TestCase):
         with self.assertRaises(loader.ExcelToolError) as ctx:
             pivot.build_pivot(self.df, ["省份"], "省份", "销售额", "求和")
         self.assertIn("不能是同一列", ctx.exception.message)
+
+    def test_build_pivot_tolerates_duplicate_labels(self) -> None:
+        df = pd.DataFrame(
+            [[101, 102, 5.0], [103, 104, 7.0]],
+            columns=["订单号", "订单号", "金额"],
+        )
+        result = pivot.build_pivot(df, ["订单号"], None, "金额", "求和")
+        self.assertFalse(result.empty)
+        self.assertAlmostEqual(float(result.iloc[0, 1]), 5.0)
+
+    def test_pie_data_returns_single_series(self) -> None:
+        df = pd.DataFrame({"省份": ["广东", "江苏", "广东"], "销售额": [1, 2, 3]})
+        result = pivot.build_pivot(df, ["省份"], None, "销售额", "求和")
+        data = pivot.pie_data(result, ["省份"])
+        self.assertEqual(list(data.columns), ["维度", "数值"])
+        self.assertEqual(len(data), 2)
+        self.assertAlmostEqual(float(data["数值"].sum()), 6.0)
+
+    def test_pie_data_rejects_multi_columns(self) -> None:
+        df = pd.DataFrame(
+            {"省份": ["广东", "江苏"], "季度": ["Q1", "Q2"], "销售额": [1.0, 2.0]}
+        )
+        result = pivot.build_pivot(df, ["省份"], "季度", "销售额", "求和")
+        with self.assertRaises(loader.ExcelToolError) as ctx:
+            pivot.pie_data(result, ["省份"])
+        self.assertIn("单一指标", ctx.exception.message)
 
     def test_chart_data_drops_totals(self) -> None:
         result = pivot.build_pivot(self.df, ["省份"], "季度", "销售额", "求和")
