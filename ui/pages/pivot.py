@@ -39,7 +39,14 @@ def render() -> None:
     row2 = st.selectbox("第二行维度（可选）", [NONE_OPTION, *columns], key="pivot_row2")
     row_cols = (row1,) if row2 == NONE_OPTION else (row1, row2)
     column_col = st.selectbox("列维度（可选）", [NONE_OPTION, *columns], key="pivot_col")
-    value_col = st.selectbox("指标列（只列数值列）", numeric, key="pivot_value")
+    dims = {row1, row2, column_col} - {NONE_OPTION}
+    default_value = next((name for name in numeric if name not in dims), numeric[0])
+    value_col = st.selectbox(
+        "指标列（只列数值列）",
+        numeric,
+        index=numeric.index(default_value),
+        key="pivot_value",
+    )
     agg_label = st.radio("聚合方式", pivot.AGG_OPTIONS, horizontal=True, key="pivot_agg")
     show_chart = st.selectbox(
         "图表类型",
