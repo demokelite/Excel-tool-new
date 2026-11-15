@@ -23,6 +23,7 @@ MARGIN_LABEL = "合计"
 EMPTY_LABEL = "空值"
 MAX_PIVOT_ROWS = 5000
 DISPLAY_ROWS = 500
+MAX_CHART_ROWS = 100
 
 
 def numeric_columns(df: pd.DataFrame) -> list[str]:
@@ -66,6 +67,21 @@ def build_pivot(
     flat = ordered.reset_index()
     flat.columns = _flatten_names(flat.columns)
     return flat
+
+
+def chart_data(result: pd.DataFrame, row_cols: Sequence[str]) -> pd.DataFrame:
+    """从透视结果取画图数据：去掉合计行 / 合计列，行维度拼成索引，最多 100 行。"""
+    rows = [name for name in row_cols if name in result.columns]
+    if not rows or result.empty:
+        return pd.DataFrame()
+    body = result[result[rows[0]] != MARGIN_LABEL]
+    labels = body[rows[0]].astype(str)
+    for name in rows[1:]:
+        labels = labels.str.cat(body[name].astype(str), sep=" / ")
+    values = body.drop(columns=[*rows, MARGIN_LABEL], errors="ignore")
+    values = values.apply(pd.to_numeric, errors="coerce").fillna(0)
+    values.index = labels
+    return values.head(MAX_CHART_ROWS)
 
 
 def _validate(

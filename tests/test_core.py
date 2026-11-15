@@ -271,6 +271,19 @@ class TestPivot(unittest.TestCase):
             pivot.build_pivot(self.df, ["省份"], "省份", "销售额", "求和")
         self.assertIn("不能是同一列", ctx.exception.message)
 
+    def test_chart_data_drops_totals(self) -> None:
+        result = pivot.build_pivot(self.df, ["省份"], "季度", "销售额", "求和")
+        chart = pivot.chart_data(result, ["省份"])
+        self.assertEqual(chart.index.tolist(), ["广东", "江苏", "空值"])
+        self.assertEqual(list(chart.columns), ["Q1", "Q2"])
+        self.assertEqual(float(chart.loc["广东", "Q1"]), 100.0)
+
+    def test_chart_data_joins_two_row_dimensions(self) -> None:
+        result = pivot.build_pivot(self.df, ["省份", "季度"], None, "销售额", "求和")
+        chart = pivot.chart_data(result, ["省份", "季度"])
+        self.assertEqual(chart.index[0], "广东 / Q1")
+        self.assertEqual(list(chart.columns), ["销售额"])
+
 
 class TestCleaner(unittest.TestCase):
     def test_number_text_is_converted_with_percent(self) -> None:

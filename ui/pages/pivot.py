@@ -40,6 +40,7 @@ def render() -> None:
     column_col = st.selectbox("列维度（可选）", [NONE_OPTION, *columns], key="pivot_col")
     value_col = st.selectbox("指标列（只列数值列）", numeric, key="pivot_value")
     agg_label = st.radio("聚合方式", pivot.AGG_OPTIONS, horizontal=True, key="pivot_agg")
+    show_chart = st.toggle("显示柱状图", value=False, key="pivot_chart")
 
     if len(set(row_cols)) < len(row_cols):
         st.warning("两个行维度选了同一列，换一列再生成。")
@@ -52,6 +53,8 @@ def render() -> None:
         return
 
     _render_table(result)
+    if show_chart:
+        _render_chart(result, row_cols)
     signature = _signature(table, row_cols, column, value_col, agg_label)
     if st.button("生成透视表", type="primary", key="pivot_run"):
         data = _build(result)
@@ -77,6 +80,18 @@ def _render_table(result: pd.DataFrame) -> None:
         st.dataframe(result.head(pivot.DISPLAY_ROWS))
         return
     st.dataframe(result)
+
+
+def _render_chart(result: pd.DataFrame, row_cols: tuple[str, ...]) -> None:
+    """用内置 st.bar_chart 画柱状图，不引入新依赖。"""
+    data = pivot.chart_data(result, row_cols)
+    if data.empty or not len(data.columns):
+        st.info("这张透视表没有可以画图的数值列。")
+        return
+    st.caption(
+        f"柱状图：不含合计行 / 合计列，最多展示前 {pivot.MAX_CHART_ROWS} 行。"
+    )
+    st.bar_chart(data)
 
 
 def _build(result: pd.DataFrame) -> bytes | None:
