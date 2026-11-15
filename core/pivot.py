@@ -175,6 +175,12 @@ def _validate(
             "同一列同时放在行和列上，交叉表没法展开。",
             "换一列当列维度，或者把列维度设为「（不选）」。",
         )
+    if value_col in rows or value_col == column_col:
+        raise ExcelToolError(
+            "指标列不能同时又当维度",
+            "同一列既用来分组、又用来汇总，pandas 会直接报「Grouper for 'xx' not 1-dimensional」。",
+            "把「指标列」换成另一列数值，比如数量 / 销售额；或者把这一列从行 / 列维度里去掉。",
+        )
     series = df[value_col]
     if not pd.api.types.is_numeric_dtype(series):
         raise ExcelToolError(
