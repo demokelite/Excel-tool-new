@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Excel 工具箱 · 功能完备性与测试报告</title>
+<style>
+  :root {
+    --brand: #2F6BFF;
+    --brand-soft: #EAF0FF;
+    --ink: #16202E;
+    --muted: #5B6B7F;
+    --line: #E3E9F2;
+    --bg: #F5F7FB;
+    --ok: #15803D;
+    --ok-bg: #E8F7EE;
+    --warn: #B45309;
+    --warn-bg: #FEF3E2;
+    --bad: #B42318;
+    --bad-bg: #FDECEA;
+    --note: #475569;
+    --note-bg: #EEF2F7;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  }
+  .wrap { max-width: 1020px; margin: 0 auto; padding: 32px 24px 64px; }
+  header.hero {
+    background: linear-gradient(135deg, #2F6BFF 0%, #1E4BD8 60%, #12308F 100%);
+    color: #fff;
+    border-radius: 18px;
+    padding: 34px 36px;
+    box-shadow: 0 18px 40px rgba(24, 55, 140, .22);
+  }
+  header.hero h1 { margin: 0 0 8px; font-size: 26px; letter-spacing: .5px; }
+  header.hero p { margin: 0; color: rgba(255,255,255,.86); font-size: 14px; }
+  header.hero .meta { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px; }
+  header.hero .meta span {
+    background: rgba(255,255,255,.14);
+    border: 1px solid rgba(255,255,255,.22);
+    padding: 4px 10px; border-radius: 999px; font-size: 12px;
+  }
+  .cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 22px 0 8px; }
+  .card {
+    background: #fff; border: 1px solid var(--line); border-radius: 14px;
+    padding: 18px 18px 16px; box-shadow: 0 4px 14px rgba(22,32,46,.04);
+  }
+  .card .num { font-size: 28px; font-weight: 700; color: var(--brand); line-height: 1.2; }
+  .card .num small { font-size: 14px; color: var(--muted); font-weight: 500; }
+  .card .label { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  section {
+    background: #fff; border: 1px solid var(--line); border-radius: 16px;
+    padding: 26px 28px; margin-top: 20px; box-shadow: 0 4px 14px rgba(22,32,46,.03);
+  }
+  h2 {
+    font-size: 18px; margin: 0 0 6px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.3;
+  }
+  h2 + .lead { color: var(--muted); font-size: 13.5px; margin: 0 0 16px; }
+  h3 { font-size: 15px; margin: 22px 0 10px; color: #1F2C3F; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: #F8FAFD; color: #334155; font-weight: 600; font-size: 13px; white-space: nowrap; }
+  tbody tr:hover { background: #FAFCFF; }
+  td code, p code, li code {
+    background: #F1F5FB; border: 1px solid #E2E8F2; border-radius: 5px;
+    padding: 1px 5px; font-size: 12.5px; color: #1E3A8A;
+    font-family: "Cascadia Code", Consolas, "SFMono-Regular", monospace;
+  }
+  .pill {
+    display: inline-block; padding: 2px 9px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+  .p-ok { color: var(--ok); background: var(--ok-bg); }
+  .p-warn { color: var(--warn); background: var(--warn-bg); }
+  .p-bad { color: var(--bad); background: var(--bad-bg); }
+  .p-note { color: var(--note); background: var(--note-bg); }
+  .verdict {
+    display: flex; gap: 14px; align-items: flex-start;
+    background: var(--ok-bg); border: 1px solid #B7E4C7;
+    border-radius: 12px; padding: 16px 18px; margin-top: 18px;
+  }
+  .verdict .icon {
+    flex: 0 0 34px; height: 34px; border-radius: 50%;
+    background: var(--ok); color: #fff; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; font-size: 16px;
+  }
+  .verdict b { display: block; margin-bottom: 2px; }
+  .verdict p { margin: 0; color: #245332; font-size: 13.5px; }
+  ul.tight { margin: 8px 0 0; padding-left: 20px; }
+  ul.tight li { margin: 5px 0; }
+  .bar { height: 8px; border-radius: 999px; background: #EDF1F8; overflow: hidden; margin-top: 6px; }
+  .bar > i { display: block; height: 100%; background: linear-gradient(90deg, #2F6BFF, #6E9BFF); }
+  .split-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .kv { display: grid; grid-template-columns: 132px 1fr; gap: 6px 14px; font-size: 13.5px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; }
+  pre {
+    background: #0F172A; color: #E2E8F0; border-radius: 10px;
+    padding: 14px 16px; overflow-x: auto; font-size: 12.5px; line-height: 1.65;
+    font-family: "Cascadia Code", Consolas, "SFMono-Regular", monospace;
+  }
+  .callout {
+    border-left: 4px solid #F0B429; background: #FFFBF0;
+    padding: 12px 16px; border-radius: 0 10px 10px 0; font-size: 13.5px; color: #6B4A0B;
+  }
+  .callout.blue { border-left-color: var(--brand); background: var(--brand-soft); color: #173A86; }
+  footer { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 28px; }
+  @media (max-width: 860px) {
+    .cards { grid-template-columns: repeat(2, 1fr); }
+    .split-2 { grid-template-columns: 1fr; }
+    section { padding: 20px 16px; }
+    header.hero { padding: 26px 20px; }
+  }
+  @media print {
+    body { background: #fff; }
+    section, .card, header.hero { box-shadow: none; }
+    .wrap { max-width: none; padding: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <h1>Excel 工具箱 · 功能完备性与测试报告</h1>
+    <p>对照 TRAE_PROMPT.md 逐条核对 P0 / P1 功能，附单元测试、界面冒烟与 exe 打包实测结果。</p>
+    <div class="meta">
+      <span>报告时间 2026-11-22 17:58</span>
+      <span>Windows 11 · Python 3.13.14</span>
+      <span>Streamlit 1.67.0 · pandas 2.3.3</span>
+      <span>审计范围：app.py / core / ui / tests / 批量套名 / 打包</span>
+    </div>
+  </header>
+
+  <div class="cards">
+    <div class="card">
+      <div class="num">5 / 5</div>
+      <div class="label">功能模块全部可用（含追加的批量套名）</div>
+      <div class="bar"><i style="width:100%"></i></div>
+    </div>
+    <div class="card">
+      <div class="num">65 / 65</div>
+      <div class="label">core 层单元测试通过（0.43s）</div>
+      <div class="bar"><i style="width:100%"></i></div>
+    </div>
+    <div class="card">
+      <div class="num">0</div>
+      <div class="label">界面冒烟发现的异常</div>
+      <div class="bar"><i style="width:100%"></i></div>
+    </div>
+    <div class="card">
+      <div class="num">83.6 <small>MB</small></div>
+      <div class="label">单文件 exe 已构建并启动成功</div>
+      <div class="bar"><i style="width:100%"></i></div>
+    </div>
+  </div>
+
+  <section>
+    <h2>一、总体结论</h2>
+    <p class="lead">规格中的 P0（上传解析、拆分、合并）与 P1（透视表）均已实现并通过测试，另外追加了三种图表、批量套名和 exe 分发形态。</p>
+    <div class="verdict">
+      <div class="icon">✓</div>
+      <div>
+        <b>功能层面：完备，可交付演示。</b>
+        <p>四个 Tab 的完整链路（上传 → 配置 → 预览 → 执行 → 下载）均已打通；导出统一走 BytesIO，核心层不依赖 Streamlit，未发现 traceback 直接暴露给用户的路径。</p>
+      </div>
+    </div>
+    <h3>风险与待办：已全部关闭</h3>
+    <ul class="tight">
+      <li><span class="pill p-ok">已关闭</span> 回归测试已补 2 条；项目规则文件已补；带图片 / 图表的模板已实测无损；<code>XXXL</code> 这类内嵌写法已加告警。</li>
+      <li><span class="pill p-ok">已关闭</span> 四条主流程已完成浏览器端到端自动化（上传 → 生成 → 下载均返回 200）。</li>
+      <li><span class="pill p-ok">已关闭</span> 公网部署由你在外部完成；git 历史已重写，<code>dist</code> / <code>build</code> 已从全部提交中移除（仓库 238 KiB）。</li>
+      <li><span class="pill p-note">提醒</span> 历史重写后本地与远端分叉，推送需要 <code>git push --force-with-lease</code>；真机触屏体验仍建议各试一次。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>二、规格逐条核对</h2>
+    <p class="lead">左列为 TRAE_PROMPT.md 的条款，右列为实测结论与证据。</p>
+
+    <h3>4.1 P0 · 上传与解析（loader / components）</h3>
+    <table>
+      <thead><tr><th>规格要求</th><th>结论</th><th>证据</th></tr></thead>
+      <tbody>
+        <tr><td>三格式上传、支持多选</td><td><span class="pill p-ok">通过</span></td><td><code>UPLOAD_TYPES = ["xlsx","xls","csv"]</code>；合并 Tab 使用多文件上传</td></tr>
+        <tr><td>多 sheet 下拉切换</td><td><span class="pill p-ok">通过</span></td><td>单文件：<code>选择 sheet</code>；多文件：每个文件可多选 sheet</td></tr>
+        <tr><td>表头行号选择器，默认自动探测</td><td><span class="pill p-ok">通过</span></td><td><code>表头行号（从 1 开始）</code> + 启发式探测；可疑时提示「疑似表头在第 N 行」</td></tr>
+        <tr><td>预览 20 行 + 共 N 行 × M 列</td><td><span class="pill p-ok">通过</span></td><td><code>PREVIEW_ROWS = 20</code>；预览下方显示行列数</td></tr>
+        <tr><td>表头探测：非空 ≥2 且无重复值</td><td><span class="pill p-warn">已确认偏差</span></td><td>按确认的方案 2 放宽为「≥2 个不同非空值」，并增加下方 3 行列位置重合率 ≥80% 的形状校验；重复表头读入后自动改名 <code>_2</code></td></tr>
+        <tr><td>「全部按文本读取」开关</td><td><span class="pill p-ok">通过</span></td><td>保留身份证号 / 工号前导零；测试 <code>test_leading_zero_ids_stay_text</code></td></tr>
+        <tr><td>CSV 尝试 utf-8-sig / gbk / gb18030</td><td><span class="pill p-ok">通过</span></td><td>另有分隔符嗅探（<code>, ; \t |</code>）</td></tr>
+        <tr><td>失败给中文原因，不抛 traceback</td><td><span class="pill p-ok">通过</span></td><td>统一三段式 <code>ExcelToolError</code></td></tr>
+        <tr><td>额外：.xls 真伪识别</td><td><span class="pill p-note">增强</span></td><td>按文件头区分 xlsx / 旧版 OLE2 / 文本 CSV / HTML 假 xls，各自给专门提示</td></tr>
+      </tbody>
+    </table>
+
+    <h3>4.2 P0 · 按列拆分（splitter / split）</h3>
+    <table>
+      <thead><tr><th>规格要求</th><th>结论</th><th>证据</th></tr></thead>
+      <tbody>
+        <tr><td>选 1–2 列分组</td><td><span class="pill p-ok">通过</span></td><td><code>validate_columns</code>；两列选重会提示换列</td></tr>
+        <tr><td>显示「将拆成 N 个文件」</td><td><span class="pill p-ok">通过</span></td><td>预估口径与真实分组一致（<code>estimate_group_count</code>）</td></tr>
+        <tr><td>生成 zip + 下载按钮</td><td><span class="pill p-ok">通过</span></td><td><code>to_zip_bytes</code>，结果缓存于 session_state</td></tr>
+        <tr><td>文件名清洗 / 80 字符截断</td><td><span class="pill p-ok">通过</span></td><td><code>test_slash_and_illegal_chars</code> 等 6 条拆分测试</td></tr>
+        <tr><td>空值分组命名「空值」</td><td><span class="pill p-ok">通过</span></td><td>纯空格也归入「空值」</td></tr>
+        <tr><td>重名追加 _2、_3</td><td><span class="pill p-ok">通过</span></td><td>忽略大小写比较，截断后仍不超长</td></tr>
+        <tr><td>&gt;300 组拒绝执行</td><td><span class="pill p-ok">通过</span></td><td><code>MAX_GROUPS = 300</code>，页面提前预警</td></tr>
+        <tr><td>zip 内含 _拆分说明.txt</td><td><span class="pill p-ok">通过</span></td><td>源文件、分组列、文件数、生成时间（UTF-8 BOM）</td></tr>
+      </tbody>
+    </table>
+
+    <h3>4.3 P0 · 多表合并（merger / merge）</h3>
+    <table>
+      <thead><tr><th>规格要求</th><th>结论</th><th>证据</th></tr></thead>
+      <tbody>
+        <tr><td>多文件 / 多 sheet 合并</td><td><span class="pill p-ok">通过</span></td><td>同一文件可勾多个 sheet，统一表头设置</td></tr>
+        <tr><td>并集 / 交集对齐</td><td><span class="pill p-ok">通过</span></td><td><code>ALIGN_UNION</code> 默认、<code>ALIGN_INTERSECT</code></td></tr>
+        <tr><td>来源列开关（文件名 / sheet 名）</td><td><span class="pill p-ok">通过</span></td><td>撞名自动改为「来源_2」，避免 insert 冲突</td></tr>
+        <tr><td>列顺序以第一个文件为准</td><td><span class="pill p-ok">通过</span></td><td>缺失列补空，不报错</td></tr>
+        <tr><td>无公共列时报错</td><td><span class="pill p-ok">通过</span></td><td>提示「这些表的表头没有交集，可能表头行选错了」</td></tr>
+        <tr><td>只传 1 个文件时按钮禁用</td><td><span class="pill p-ok">通过</span></td><td>AppTest 中按钮存在且为禁用态</td></tr>
+      </tbody>
+    </table>
+
+    <h3>4.4 P1 · 数据透视表（pivot）</h3>
+    <table>
+      <thead><tr><th>规格要求</th><th>结论</th><th>证据</th></tr></thead>
+      <tbody>
+        <tr><td>行维度 1–2 列 / 列维度 0–1 列</td><td><span class="pill p-ok">通过</span></td><td>维度选重、列维度与行维度相同时有中文提示</td></tr>
+        <tr><td>指标列只列数值列 + 5 种聚合</td><td><span class="pill p-ok">通过</span></td><td>求和 / 计数 / 平均 / 最大 / 最小</td></tr>
+        <tr><td>合计行 / 合计列</td><td><span class="pill p-ok">通过</span></td><td><code>margins=True</code>，合计固定排最后</td></tr>
+        <tr><td>维度值按字符串排序</td><td><span class="pill p-ok">通过</span></td><td><code>_sorted_labels</code>，中文按字符串序</td></tr>
+        <tr><td>&gt;5000 行只展示 500，导出完整</td><td><span class="pill p-ok">通过</span></td><td><code>MAX_PIVOT_ROWS / DISPLAY_ROWS</code></td></tr>
+        <tr><td>柱状图</td><td><span class="pill p-ok">通过</span></td><td><code>st.bar_chart</code></td></tr>
+        <tr><td>折线图 / 饼图</td><td><span class="pill p-note">用户追加</span></td><td><code>st.line_chart</code>；饼图用 altair <code>mark_arc</code>（Streamlit 自带传递依赖，未改 requirements）；多指标时提示改单一指标</td></tr>
+        <tr><td>导出 xlsx 可被 Excel 打开</td><td><span class="pill p-ok">通过</span></td><td>XlsxWriter + BytesIO；<code>test_export_roundtrip</code></td></tr>
+      </tbody>
+    </table>
+
+    <h3>追加 · 批量套名（generator / generate）</h3>
+    <table>
+      <thead><tr><th>需求</th><th>结论</th><th>证据</th></tr></thead>
+      <tbody>
+        <tr><td>上传模板 + 姓名名单，批量生成</td><td><span class="pill p-ok">通过</span></td><td>新增第 4 个 Tab「批量套名」；模板仅收 .xlsx</td></tr>
+        <tr><td>模板内名字位置用 <code>XXX</code> 标记</td><td><span class="pill p-ok">通过</span></td><td>上传即扫描并提示「检测到 N 处 XXX」；0 处时禁用生成按钮</td></tr>
+        <tr><td>只改名字，其它保持原样</td><td><span class="pill p-ok">通过</span></td><td>直接替换 zip 内 XML 文本，非文本部件逐字节一致；实测字体、填充、合并单元格、列宽全部保留</td></tr>
+        <tr><td>文件名使用姓名</td><td><span class="pill p-ok">通过</span></td><td><code>张三.xlsx</code>；非法字符替换、重名加 <code>_2</code>、截断 80 字符</td></tr>
+        <tr><td>名单清洗与去重</td><td><span class="pill p-ok">通过</span></td><td>全角归一、去空格、跳过空值与重复并显示数量</td></tr>
+        <tr><td>特殊字符不写坏文件</td><td><span class="pill p-ok">通过</span></td><td>姓名含 <code>&amp;</code>、<code>&lt;</code> 时做 XML 转义，回读内容正确</td></tr>
+        <tr><td>人数上限</td><td><span class="pill p-ok">通过</span></td><td>超过 300 人拒绝并提示拆分名单</td></tr>
+        <tr><td>交付物</td><td><span class="pill p-ok">通过</span></td><td>zip 内含每人文件 + <code>_生成说明.txt</code></td></tr>
+        <tr><td>已知限制</td><td><span class="pill p-note">说明</span></td><td><code>XXX</code> 为全局占位符，模板其它位置留 XXX 会一起被替换；旧版 .xls 需先另存 .xlsx</td></tr>
+      </tbody>
+    </table>
+
+    <h3>第 5–9 节：清洗、UI、性能、安全与红线</h3>
+    <table>
+      <thead><tr><th>条款</th><th>结论</th><th>证据</th></tr></thead>
+      <tbody>
+        <tr><td>§5 清洗 9 条规则</td><td><span class="pill p-ok">通过</span></td><td>NFKC、千分位、空值统一、去重开关、截断 32767、Excel 序列号、中文日期；9 条测试</td></tr>
+        <tr><td>§5 百分号处理</td><td><span class="pill p-warn">已确认偏差</span></td><td>规格写「保留原值展示，聚合时可选 0.12」，实现为开启「数值化」后直接折算 0.12</td></tr>
+        <tr><td>§6 居中布局 / Tab 编排 / spinner / 三段式</td><td><span class="pill p-ok">通过</span></td><td>四个 Tab：拆分、合并、透视、批量套名；另加首页演示文件下载</td></tr>
+        <tr><td>§7 50MB / 20 万行上限、cache_data、BytesIO</td><td><span class="pill p-ok">通过</span></td><td><code>_cached_table</code> 按签名缓存；全仓库无 tempfile / 写盘调用</td></tr>
+        <tr><td>§8 不接第三方 API、日志不含数据</td><td><span class="pill p-ok">通过</span></td><td>源码扫描无 API Key / Token / 外部请求</td></tr>
+        <tr><td>§9 红线：core 不 import streamlit</td><td><span class="pill p-ok">通过</span></td><td><code>core/*.py</code> 仅在 docstring 中提及，无实际 import</td></tr>
+        <tr><td>§9 红线：不新增 requirements 之外依赖</td><td><span class="pill p-ok">通过</span></td><td>altair 为 Streamlit 自带依赖，requirements.txt 仍为 4 行</td></tr>
+        <tr><td>§3 目录结构：.trae/rules/project_rules.md</td><td><span class="pill p-warn">缺失</span></td><td>当前只有 <code>.trae/mcp.json</code>，不影响运行</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>三、测试执行记录</h2>
+    <p class="lead">命令：<code>python tests/test_core.py</code>；框架：标准库 unittest。</p>
+    <div class="split-2">
+      <div>
+        <table>
+          <thead><tr><th>测试类</th><th>用例数</th><th>结果</th></tr></thead>
+          <tbody>
+            <tr><td>TestLoader</td><td>18</td><td><span class="pill p-ok">通过</span></td></tr>
+            <tr><td>TestPivot</td><td>14</td><td><span class="pill p-ok">通过</span></td></tr>
+            <tr><td>TestCleaner</td><td>9</td><td><span class="pill p-ok">通过</span></td></tr>
+            <tr><td>TestGenerator</td><td>9</td><td><span class="pill p-ok">通过</span></td></tr>
+            <tr><td>TestMerger</td><td>7</td><td><span class="pill p-ok">通过</span></td></tr>
+            <tr><td>TestSplitter</td><td>6</td><td><span class="pill p-ok">通过</span></td></tr>
+            <tr><td>TestExporter</td><td>2</td><td><span class="pill p-ok">通过</span></td></tr>
+            <tr><td><b>合计</b></td><td><b>65</b></td><td><b>Ran 65 tests in 0.433s · OK</b></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <h3>界面冒烟（AppTest）</h3>
+        <pre>exceptions: []
+tabs: ['按列拆分', '多表合并', '数据透视表', '批量套名']
+uploads: 5     # 三个数据 Tab + 模板 + 名单
+downloads: 1   # 首页演示文件
+buttons: 1     # 合并并下载（未上传时禁用）</pre>
+        <p style="font-size:13px;color:var(--muted);margin-top:8px">AppTest 不支持 file_uploader，上传链路由下面的浏览器端到端用例覆盖。</p>
+      </div>
+    </div>
+
+    <h3>浏览器端到端实测（真实上传 + 真实下载）</h3>
+    <table>
+      <thead><tr><th>流程</th><th>操作</th><th>结果</th></tr></thead>
+      <tbody>
+        <tr><td>按列拆分</td><td>上传 sample_sales.xlsx → 选「省份」→ 开始拆分 → 下载 zip</td><td><span class="pill p-ok">32 个文件 / 1000 行；zip 200 OK</span></td></tr>
+        <tr><td>多表合并</td><td>上传 A、B 两张表 → 合并并下载</td><td><span class="pill p-ok">预览 6 行 × 3 列（A 被重复上传一次）；下载按钮出现</span></td></tr>
+        <tr><td>数据透视表</td><td>开数值化 → 省份 × 数量 → 饼图 / 折线图</td><td><span class="pill p-ok">饼图 32 扇区；折线图 Y 轴 0–450</span></td></tr>
+        <tr><td>批量套名</td><td>模板（2 处 XXX）+ 3 人名单 → 开始生成 → 下载 zip</td><td><span class="pill p-ok">提示「检测到 2 处 XXX」「有效姓名 3 人」；zip 200 OK</span></td></tr>
+      </tbody>
+    </table>
+
+    <h3>核心场景手工核对（示例数据 1000 行 × 8 列）</h3>
+    <table>
+      <thead><tr><th>场景</th><th>预期</th><th>实测</th></tr></thead>
+      <tbody>
+        <tr><td>按「省份」拆分</td><td>31 省 + 1 空值 = 32 个文件，行数合计 1000</td><td><span class="pill p-ok">32 个文件 · 1000 行守恒</span></td></tr>
+        <tr><td>城市含「广州/天河」</td><td>文件名安全生成</td><td><span class="pill p-ok">斜杠替换为下划线</span></td></tr>
+        <tr><td>透视：省份 × 指标「数量」</td><td>33 行（含合计），无异常</td><td><span class="pill p-ok">33 行 · 饼图 32 扇区</span></td></tr>
+        <tr><td>指标列 = 行维度（自引用）</td><td>中文提示，不崩</td><td><span class="pill p-ok">报错被拦截并给出改法；已加 2 条回归用例</span></td></tr>
+        <tr><td>套名：2 处 XXX + 4 人名（1 重复 1 空白）</td><td>2 个 xlsx + 说明文件</td><td><span class="pill p-ok">zip 内 3 个条目 · 9KB</span></td></tr>
+        <tr><td>套名：模板无 XXX</td><td>提示原因，不生成</td><td><span class="pill p-ok">按钮禁用 + 红字提示</span></td></tr>
+        <tr><td>套名：模板含 PNG 图片 + 折线图 + 打印区域</td><td>图片、图表、打印区域原样保留</td><td><span class="pill p-ok">媒体部件逐字节一致；回读 1 图 1 图 1 打印区域</span></td></tr>
+        <tr><td>套名：模板含「尺码：XXXL」</td><td>提示疑似非占位符</td><td><span class="pill p-ok">命中数 1，告警列出 XXXL</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>四、exe 打包实测</h2>
+    <p class="lead">PyInstaller 6.22.3 单文件模式，Streamlit 静态资源与 altair schema 全量收集。</p>
+    <div class="split-2">
+      <div>
+        <dl class="kv">
+          <dt>产物</dt><dd><code>dist\ExcelToolbox.exe</code> · 83.6 MB（含批量套名）</dd>
+          <dt>构建命令</dt><dd><code>python -m PyInstaller excel-toolbox.spec --clean --noconfirm</code></dd>
+          <dt>入口</dt><dd><code>launcher.py</code>（找端口 → 起服务 → 开浏览器）</dd>
+          <dt>监听</dt><dd><code>0.0.0.0</code>，手机可访问</dd>
+          <dt>健康检查</dt><dd><code>GET /_stcore/health</code> → 200 ok</dd>
+          <dt>页面</dt><dd><code>GET /</code> → 200（7,863 bytes）</dd>
+          <dt>端口抢占</dt><dd>8501 被占用时自动顺延到 8502（已实测）</dd>
+        </dl>
+      </div>
+      <div>
+        <h3>本次打包修掉的两个坑</h3>
+        <ul class="tight">
+          <li><b>developmentMode 顶掉端口</b>：PyInstaller 下 Streamlit 误判为开发模式，报 <code>server.port does not work when global.developmentMode is true</code>；已在启动参数里显式关闭。</li>
+          <li><b>Windows 端口探测失效</b>：允许重复 bind 同端口，导致 exe 和开发服务抢 8501；改为「先 connect 探测再 bind」。</li>
+        </ul>
+        <div class="callout" style="margin-top:12px">单文件首次启动需解压依赖，约 10 秒；未做代码签名，Windows SmartScreen 可能提示「未知发布者」，选择「更多信息 → 仍要运行」即可。</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>五、风险与待办</h2>
+    <table>
+      <thead><tr><th>状态</th><th>事项</th><th>处理结果</th></tr></thead>
+      <tbody>
+        <tr><td><span class="pill p-ok">已关闭</span></td><td>批量套名的占位符风险</td><td>新增内嵌写法检测：<code>XXXL</code>、<code>1XXX</code> 这类会被列出并提示；全局替换仍需上传时核对</td></tr>
+        <tr><td><span class="pill p-ok">已关闭</span></td><td>补 .trae/rules/project_rules.md</td><td>已补，含分层、错误文案、批次、限额与测试要求</td></tr>
+        <tr><td><span class="pill p-ok">已关闭</span></td><td>带图片模板实测</td><td>PNG + 折线图 + 打印区域模板生成后全部保留（媒体部件逐字节一致）</td></tr>
+        <tr><td><span class="pill p-ok">已关闭</span></td><td>浏览器全流程验收</td><td>拆分 / 合并 / 透视 / 套名四条流程真实上传与下载均通过</td></tr>
+        <tr><td><span class="pill p-ok">已关闭</span></td><td>公网部署</td><td>由你自行部署完成，本报告不再列为待办</td></tr>
+        <tr><td><span class="pill p-ok">已关闭</span></td><td>git 历史清理</td><td>已用 filter-branch 移除 dist / build，仓库 .git 由约 190MB 降至 0.3MB；推送需 force-with-lease</td></tr>
+        <tr><td><span class="pill p-note">建议</span></td><td>真机触屏体验</td><td>自动化无法覆盖手机文件选择器与下载位置，建议 iOS / Android 各走一次</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>六、复现方式</h2>
+    <pre># 1) 单测
+python tests/test_core.py
+
+# 2) 网页预览（局域网可访问）
+python -m streamlit run app.py --server.address 0.0.0.0 --server.port 8501
+
+# 3) 构建单文件 exe
+python -m PyInstaller excel-toolbox.spec --clean --noconfirm
+dist\ExcelToolbox.exe</pre>
+    <div class="callout blue" style="margin-top:14px">报告生成时的运行状态：网页预览监听 <code>0.0.0.0:8501</code>；示例文件为 <code>excel-docs\sample_sales.xlsx</code>（首页可直接下载）。</div>
+  </section>
+
+  <footer>Excel 工具箱 · 功能完备性与测试报告 · 2026-11-22</footer>
+</div>
+</body>
+</html>

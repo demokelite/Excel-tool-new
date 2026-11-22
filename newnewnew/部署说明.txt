@@ -1,0 +1,59 @@
+简历工坊 · 静态部署包
+
+版本：0.1.0
+构建：Vite 5，228 modules
+生成时间：2026-11-18
+
+一、适用方式
+这是一个纯静态站点，只包含构建产物；不需要 Node、数据库或后端服务。
+当前构建按站点根路径 / 生成，请将本目录内容上传到域名根目录。
+
+如果部署在 /resume/ 这类子路径，需要重新构建后再打包：
+  npm run build -- --base=/resume/
+然后把新的 dist 目录替换进本包。
+
+二、上传
+必须上传：
+  index.html
+  favicon.svg
+  assets/（全部文件）
+  本说明和平台配置文件
+不要只上传 index.html；assets/ 中是页面脚本和样式。
+
+三、history 路由回退
+站点使用 Vue Router history 模式，以下地址需要回退到 index.html：
+  /templates
+  /editor
+  /editor/:templateId
+  任意未匹配路径
+如果托管平台不做回退，直接访问这些地址会返回 404。
+本包已附带四种平台配置，按实际平台选用一种：
+  nginx.conf.example  Nginx
+  _redirects          Netlify
+  vercel.json         Vercel
+  .htaccess           Apache
+
+四、验证清单
+1. 访问 / 能看到首页。
+2. 访问 /templates 能看到 18 套模板。
+3. 访问 /editor/ink 能进入编辑器。
+4. 新建或修改后刷新，内容仍在当前浏览器。
+5. 打印为 A4 PDF 正常，文字可选中。
+
+五、数据与安全
+- 无账号、无后端、无 AI 接口。
+- 简历数据只保存在当前浏览器的 localStorage，不会自动同步到其他设备。
+- 清理浏览器数据或更换浏览器后，内容不会自动恢复。
+- PDF 由浏览器打印生成，建议选择 A4、边距无，并勾选背景图形。
+
+六、目录结构
+index.html
+favicon.svg
+assets/
+build-info.json
+_redirects
+vercel.json
+nginx.conf.example
+.htaccess
+.nojekyll
+部署说明.txt

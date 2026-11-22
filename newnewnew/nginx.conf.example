@@ -1,0 +1,21 @@
+# 简历工坊 · Nginx 静态托管示例
+# 将 root 和 server_name 换成你的实际值。
+server {
+    listen 80;
+    server_name example.com;
+
+    root /var/www/resume-studio;
+    index index.html;
+
+    # 静态资源长期缓存；文件名带内容哈希，可放心 immutable。
+    location /assets/ {
+        try_files $uri =404;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # history 模式：未知路径全部回退到 index.html。
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
