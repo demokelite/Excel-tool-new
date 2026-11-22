@@ -24,15 +24,28 @@ def bundle_dir() -> Path:
 
 
 def pick_port() -> int:
-    """从 8501 往上找一个没被占用的端口，都在用就退回 8501。"""
+    """从 8501 往上找一个没被占用的端口，都在用就退回 8501。
+
+    Windows 允许重复 bind 同一端口，所以先试连一下，连得上就说明有人在用。
+    """
     for port in range(PORT_START, PORT_START + PORT_TRIES):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            try:
-                sock.bind(("0.0.0.0", port))
-            except OSError:
-                continue
+        if not _in_use(port):
             return port
     return PORT_START
+
+
+def _in_use(port: int) -> bool:
+    """端口是否已被占用：能连上，或者 bind 失败，都算占用。"""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.settimeout(0.3)
+        if probe.connect_ex(("127.0.0.1", port)) == 0:
+            return True
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        try:
+            sock.bind(("0.0.0.0", port))
+        except OSError:
+            return True
+    return False
 
 
 def main() -> None:
@@ -58,6 +71,7 @@ def main() -> None:
         "--server.fileWatcherType=none",
         "--server.maxUploadSize=50",
         "--browser.gatherUsageStats=false",
+        "--global.developmentMode=false",
     ]
     from streamlit.web import cli
 

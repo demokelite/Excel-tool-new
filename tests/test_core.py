@@ -13,10 +13,11 @@ from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+from openpyxl import load_workbook
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from core import cleaner, loader, merger, pivot, splitter  # noqa: E402
+from core import cleaner, generator, loader, merger, pivot, splitter  # noqa: E402
 from core.exporter import to_xlsx_bytes, to_zip_bytes  # noqa: E402
 
 
@@ -314,6 +315,17 @@ class TestPivot(unittest.TestCase):
             pivot.build_pivot(self.df, ["省份"], "省份", "销售额", "求和")
         self.assertIn("不能是同一列", ctx.exception.message)
 
+    def test_value_column_used_as_row_dimension_raises(self) -> None:
+        """回归：指标列又当行维度时，pandas 会抛 Grouper not 1-dimensional。"""
+        with self.assertRaises(loader.ExcelToolError) as ctx:
+            pivot.build_pivot(self.df, ["销售额"], None, "销售额", "求和")
+        self.assertIn("指标列不能同时又当维度", ctx.exception.message)
+
+    def test_value_column_used_as_column_dimension_raises(self) -> None:
+        with self.assertRaises(loader.ExcelToolError) as ctx:
+            pivot.build_pivot(self.df, ["省份"], "销售额", "销售额", "求和")
+        self.assertIn("指标列不能同时又当维度", ctx.exception.message)
+
     def test_build_pivot_tolerates_duplicate_labels(self) -> None:
         df = pd.DataFrame(
             [[101, 102, 5.0], [103, 104, 7.0]],
@@ -428,6 +440,71 @@ class TestExporter(unittest.TestCase):
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             self.assertEqual(archive.namelist(), ["a.xlsx", splitter.NOTES_FILENAME])
             self.assertIsNone(archive.testzip())
+
+
+class TestGenerator(unittest.TestCase):
+    def test_scan_and_fill_replaces_name(self) -> None:
+        template = _template_with_placeholder()
+        self.assertEqual(generator.scan_template(template).hits, 1)
+        files = generator.fill_template(template, ["张三", "李四"], "证书.xlsx", "名单.xlsx")
+        self.assertEqual(list(files), ["张三.xlsx", "李四.xlsx"])
+        book = load_workbook(io.BytesIO(files["张三.xlsx"]))
+        cell = book["证书"]["B2"]
+        self.assertEqual(cell.value, "姓名：张三")
+        self.assertTrue(cell.font.bold)
+
+    def test_special_chars_are_escaped(self) -> None:
+        files = generator.fill_template(_template_with_placeholder(), ["A&B<C"])
+        book = load_workbook(io.BytesIO(next(iter(files.values()))))
+        self.assertEqual(book["证书"]["B2"].value, "姓名：A&B<C")
+
+    def test_illegal_filename_chars_are_replaced(self) -> None:
+        files = generator.fill_template(_template_with_placeholder(), ["广东/深圳"])
+        self.assertEqual(list(files), ["广东_深圳.xlsx"])
+
+    def test_names_are_cleaned_and_deduped(self) -> None:
+        result = generator.prepare_names(["张三", " 张三 ", "", None, "李四"])
+        self.assertEqual(result.names, ("张三", "李四"))
+        self.assertEqual(result.skipped_blank, 2)
+        self.assertEqual(result.skipped_duplicate, 1)
+
+    def test_embedded_placeholder_is_flagged(self) -> None:
+        scan = generator.scan_template(_template_with_placeholder("尺码：XXXL"))
+        self.assertEqual(scan.hits, 1)
+        self.assertIn("XXXL", scan.suspicious)
+
+    def test_plain_placeholder_is_not_flagged(self) -> None:
+        scan = generator.scan_template(_template_with_placeholder())
+        self.assertEqual(scan.hits, 1)
+        self.assertEqual(scan.suspicious, ())
+
+    def test_template_without_placeholder_is_rejected(self) -> None:
+        with self.assertRaises(loader.ExcelToolError):
+            generator.fill_template(_template_with_placeholder("姓名：___"), ["张三"])
+
+    def test_too_many_names_are_rejected(self) -> None:
+        with self.assertRaises(loader.ExcelToolError):
+            generator.prepare_names([f"员工{i}" for i in range(generator.MAX_NAMES + 1)])
+
+    def test_non_zip_template_is_rejected(self) -> None:
+        with self.assertRaises(loader.ExcelToolError):
+            generator.scan_template(b"not a zip")
+
+
+def _template_with_placeholder(text: str = "姓名：XXX") -> bytes:
+    """造一个带加粗样式和占位符的最小模板。"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "证书"
+    sheet["A1"] = "结业证书"
+    sheet["B2"] = text
+    sheet["B2"].font = Font(bold=True)
+    buffer = io.BytesIO()
+    book.save(buffer)
+    return buffer.getvalue()
 
 
 if __name__ == "__main__":
