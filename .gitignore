@@ -1,0 +1,19 @@
+# Python 运行时产物
+__pycache__/
+*.py[cod]
+
+# 打包产物（体积大，不入库）
+build/
+dist/
+*.spec.bak
+
+# 日志与本地环境
+*.log
+.venv/
+venv/
+.env
+
+# 系统杂项
+.DS_Store
+Thumbs.db
+~$*.xlsx
